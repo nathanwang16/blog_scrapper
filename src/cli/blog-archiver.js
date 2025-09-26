@@ -31,7 +31,8 @@ class BlogArchiver {
   constructor(options = {}) {
     this.browser = null;
     this.page = null;
-    this.viewportWidth = parseInt(options.width) || 1280;
+    // Support 'auto' for automatic width detection
+    this.viewportWidth = options.width === 'auto' ? 'auto' : (parseInt(options.width) || 'auto');
     this.fullPage = options.fullPage || false;
   }
 
@@ -48,9 +49,10 @@ class BlogArchiver {
     });
     this.page = await this.browser.newPage();
     
-    // Set viewport to match content width for better layout preservation
+    // Set initial viewport (will be adjusted if auto-width is enabled)
+    const initialWidth = this.viewportWidth === 'auto' ? 1280 : this.viewportWidth;
     await this.page.setViewport({
-      width: this.viewportWidth,
+      width: initialWidth,
       height: 720,
       deviceScaleFactor: 1
     });
@@ -62,6 +64,122 @@ class BlogArchiver {
     await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
   }
 
+  async detectOptimalViewport(url) {
+    console.log(chalk.blue('🔍 Detecting optimal viewport width...'));
+    
+    // First load with a wide viewport to see actual content width
+    await this.page.setViewport({
+      width: 1920,
+      height: 1080,
+      deviceScaleFactor: 1
+    });
+    
+    await this.page.goto(url, {
+      waitUntil: ['networkidle0', 'domcontentloaded'],
+      timeout: 60000
+    });
+    
+    // Wait for content to stabilize
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Detect the actual content width
+    const dimensions = await this.page.evaluate(() => {
+      // Find the main content container
+      const selectors = [
+        'article', 'main', '.content', '.post', '.entry-content',
+        '.article-content', '.blog-post', '.post-content', '#content',
+        '[role="main"]', '.container', '.wrapper'
+      ];
+      
+      let contentElement = null;
+      let maxWidth = 0;
+      
+      // Try to find the main content area
+      for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          const computedStyle = window.getComputedStyle(element);
+          const totalWidth = rect.width + 
+            parseFloat(computedStyle.marginLeft) + 
+            parseFloat(computedStyle.marginRight);
+          
+          if (totalWidth > maxWidth) {
+            maxWidth = totalWidth;
+            contentElement = element;
+          }
+        }
+      }
+      
+      // If no content container found, check body
+      if (!contentElement) {
+        const bodyRect = document.body.getBoundingClientRect();
+        maxWidth = bodyRect.width;
+      }
+      
+      // Also check for any overflowing elements
+      const allElements = document.querySelectorAll('*');
+      let documentWidth = maxWidth;
+      
+      allElements.forEach(el => {
+        const rect = el.getBoundingClientRect();
+        if (rect.right > documentWidth) {
+          documentWidth = rect.right;
+        }
+      });
+      
+      // Get the scroll width as well
+      const scrollWidth = Math.max(
+        document.body.scrollWidth,
+        document.documentElement.scrollWidth
+      );
+      
+      return {
+        contentWidth: Math.ceil(maxWidth),
+        documentWidth: Math.ceil(documentWidth),
+        scrollWidth: scrollWidth,
+        recommendedWidth: Math.min(1400, Math.max(768, Math.ceil(documentWidth * 1.05))) // Add 5% padding, min 768, max 1400
+      };
+    });
+    
+    console.log(chalk.gray(`  Content width: ${dimensions.contentWidth}px`));
+    console.log(chalk.gray(`  Document width: ${dimensions.documentWidth}px`));
+    console.log(chalk.green(`  ✓ Optimal width: ${dimensions.recommendedWidth}px`));
+    
+    return dimensions.recommendedWidth;
+  }
+  
+  async checkForOverflow() {
+    return await this.page.evaluate(() => {
+      const body = document.body;
+      const html = document.documentElement;
+      
+      // Check if there's horizontal overflow
+      const hasHorizontalOverflow = body.scrollWidth > body.clientWidth || 
+                                   html.scrollWidth > html.clientWidth;
+      
+      // Check for elements that might be cut off
+      const viewportWidth = window.innerWidth;
+      const problematicElements = [];
+      
+      document.querySelectorAll('img, table, pre, .code-block, figure').forEach(el => {
+        const rect = el.getBoundingClientRect();
+        if (rect.right > viewportWidth || rect.left < 0) {
+          problematicElements.push({
+            tag: el.tagName,
+            class: el.className,
+            overflow: rect.right - viewportWidth
+          });
+        }
+      });
+      
+      return {
+        hasOverflow: hasHorizontalOverflow || problematicElements.length > 0,
+        problematicElements
+      };
+    });
+  }
+  
   async extractHeadings(url) {
     console.log(chalk.blue('📑 Extracting headings for TOC...'));
     
@@ -127,7 +245,20 @@ class BlogArchiver {
 
   async generatePDFWithTOC(url, outputPath) {
     try {
-      // Extract headings first
+      // Auto-detect optimal viewport if not manually specified
+      if (this.viewportWidth === 1280 || this.viewportWidth === 'auto') {
+        const optimalWidth = await this.detectOptimalViewport(url);
+        this.viewportWidth = optimalWidth;
+        
+        // Update viewport with detected width
+        await this.page.setViewport({
+          width: this.viewportWidth,
+          height: 720,
+          deviceScaleFactor: 1
+        });
+      }
+      
+      // Extract headings
       const headings = await this.extractHeadings(url);
       const pageTitle = await this.page.title();
 
@@ -149,16 +280,18 @@ class BlogArchiver {
               text-decoration: underline !important;
             }
             
-            /* Better code block rendering */
+            /* Better code block rendering with boundary control */
             pre, code {
               white-space: pre-wrap !important;
               word-wrap: break-word !important;
-              overflow-x: auto !important;
+              overflow-wrap: break-word !important;
+              max-width: 100% !important;
             }
             
             pre {
               max-width: 100% !important;
               overflow-x: auto !important;
+              box-sizing: border-box !important;
             }
             
             /* Preserve original code styling */
@@ -166,6 +299,8 @@ class BlogArchiver {
               background: inherit !important;
               border: inherit !important;
               padding: inherit !important;
+              display: block !important;
+              max-width: 100% !important;
             }
             
             /* Prevent page breaks in important elements */
@@ -211,36 +346,71 @@ class BlogArchiver {
               display: none !important;
             }
             
-            /* Preserve original layout */
+            /* Strict boundary control to prevent overflow */
             * {
               max-width: 100% !important;
               box-sizing: border-box !important;
             }
             
-            /* Ensure content fits */
+            /* Ensure content fits within boundaries */
             body {
               width: 100% !important;
               margin: 0 !important;
               padding: 0 !important;
+              overflow-x: hidden !important;
             }
             
-            /* Keep original article width but ensure it fits */
-            article, .post-content, .entry-content, main {
+            /* Content containers with boundary enforcement */
+            article, .post-content, .entry-content, main, .content {
               width: auto !important;
               max-width: 100% !important;
               margin: 0 auto !important;
+              overflow-x: hidden !important;
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
             }
             
-            /* Fix table overflow */
+            /* Paragraph text wrapping */
+            p, li, dd, dt, blockquote {
+              max-width: 100% !important;
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
+              hyphens: auto !important;
+            }
+            
+            /* Fix table overflow with scroll */
             table {
               max-width: 100% !important;
               width: auto !important;
+              display: block !important;
+              overflow-x: auto !important;
             }
             
-            /* Fix image sizing */
-            img, figure, picture {
+            /* Responsive table cells */
+            td, th {
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
+              max-width: 300px !important;
+            }
+            
+            /* Image boundary control */
+            img, figure, picture, video, iframe, embed, object {
               max-width: 100% !important;
               height: auto !important;
+              display: block !important;
+              margin: 0 auto !important;
+            }
+            
+            /* Figure captions */
+            figcaption {
+              max-width: 100% !important;
+              word-wrap: break-word !important;
+            }
+            
+            /* Long URLs and strings */
+            a {
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
             }
           }
         `
@@ -260,6 +430,34 @@ class BlogArchiver {
       
       // Wait a bit for layout to settle
       await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Check for overflow after CSS injection
+      const overflowCheck = await this.checkForOverflow();
+      if (overflowCheck.hasOverflow) {
+        console.log(chalk.yellow('⚠️  Content overflow detected, adjusting...'));
+        if (overflowCheck.problematicElements.length > 0) {
+          console.log(chalk.gray('  Problematic elements:'));
+          overflowCheck.problematicElements.forEach(el => {
+            console.log(chalk.gray(`    - ${el.tag}: ${el.overflow}px overflow`));
+          });
+        }
+        
+        // Try to fix with additional CSS
+        await this.page.addStyleTag({
+          content: `
+            @media print, screen {
+              /* Force all content to fit */
+              * {
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+              }
+              body {
+                overflow-x: hidden !important;
+              }
+            }
+          `
+        });
+      }
       
       console.log(chalk.blue('📄 Generating PDF for offline reading...'));
       
@@ -428,7 +626,7 @@ program
   .option('-f, --file <path>', 'Read URLs from a text file (one per line)')
   .option('--batch', 'Enable batch mode for processing multiple URLs')
   .option('--delay <ms>', 'Delay between processing URLs in batch mode', '2000')
-  .option('--width <pixels>', 'Viewport width for rendering (default: 1280)', '1280')
+  .option('--width <pixels>', 'Viewport width for rendering (default: auto)', 'auto')
   .option('--full-page', 'Capture full page height without pagination')
   .action(async (urls, options) => {
     const archiver = new BlogArchiver({

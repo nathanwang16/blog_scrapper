@@ -14,8 +14,10 @@ In an era where content can disappear at any moment, **Blog Archiver** helps you
 ## ✨ Features
 
 - 📄 **Beautiful PDF Output**: Professional A4 formatting optimized for reading
+- 🎯 **Auto-Width Detection**: Automatically detects optimal viewport width for each website
 - 📚 **Interactive Table of Contents**: Auto-generated clickable TOC from document structure
 - 🎨 **Full Content Preservation**: Maintains original styling, code blocks, and images
+- 🚫 **Overflow Prevention**: Ensures images and text don't exceed page boundaries
 - 🔗 **Functional Links**: All hyperlinks remain clickable in the PDF
 - 📸 **Smart Content Loading**: Handles lazy-loaded images and dynamic JavaScript content
 - 📝 **Clean Reading Experience**: Automatically removes ads, popups, and distractions
@@ -178,17 +180,37 @@ node src/cli/blog-archiver.js -f python-tutorials.txt -o python-learning/
 
 ## ⚙️ Configuration
 
+### Auto-Width Detection (New!)
+The tool now automatically detects the optimal viewport width for each website:
+- **Automatic by default**: No need to specify width manually
+- **Smart detection**: Analyzes content containers and actual document width
+- **Overflow prevention**: Ensures all content fits within page boundaries
+- **Manual override**: Still possible with `--width` option if needed
+
+### PDF Generation Options
+```bash
+# Auto-detect width (default)
+node src/cli/blog-archiver.js https://blog.com/post
+
+# Manual width override
+node src/cli/blog-archiver.js https://blog.com/post --width 1920
+
+# Full page capture without pagination
+node src/cli/blog-archiver.js https://blog.com/post --full-page
+```
+
 ### Default PDF Settings
 - **Format**: A4 (210mm × 297mm)
-- **Margins**: 20mm top/bottom, 15mm left/right
-- **Scale**: 95% for optimal readability
-- **Headers/Footers**: Document title and page numbers
+- **Margins**: 15mm top/bottom, 10mm left/right
+- **Scale**: 1.0 (preserves original dimensions)
+- **Width detection**: Automatic (768px min, 1400px max)
 - **Backgrounds**: Preserves background colors and images
 
 ### Batch Processing Options
 - **Default delay**: 2000ms between requests
 - **Output directory**: `./archive` (customizable with `-o`)
 - **Timeout**: 60 seconds per page
+- **Viewport width**: Auto-detected per URL
 
 ## 🔧 Troubleshooting
 
