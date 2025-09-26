@@ -88,62 +88,100 @@ class BlogArchiver {
       const selectors = [
         'article', 'main', '.content', '.post', '.entry-content',
         '.article-content', '.blog-post', '.post-content', '#content',
-        '[role="main"]', '.container', '.wrapper'
+        '[role="main"]', '.container', '.wrapper', 'body'
       ];
       
       let contentElement = null;
-      let maxWidth = 0;
+      let maxContentWidth = 0;
+      let hasValidContent = false;
       
-      // Try to find the main content area
+      // Try to find the main content area with actual content
       for (const selector of selectors) {
-        const element = document.querySelector(selector);
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          const computedStyle = window.getComputedStyle(element);
-          const totalWidth = rect.width + 
-            parseFloat(computedStyle.marginLeft) + 
-            parseFloat(computedStyle.marginRight);
-          
-          if (totalWidth > maxWidth) {
-            maxWidth = totalWidth;
-            contentElement = element;
+        const elements = selector === 'body' ? [document.body] : document.querySelectorAll(selector);
+        
+        for (const element of elements) {
+          if (element) {
+            const rect = element.getBoundingClientRect();
+            const computedStyle = window.getComputedStyle(element);
+            
+            // Skip if element has no width or is hidden
+            if (rect.width === 0 || computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
+              continue;
+            }
+            
+            // Check if element has actual content (not just empty container)
+            const hasText = element.textContent.trim().length > 100;
+            const hasChildren = element.children.length > 0;
+            
+            if (hasText || hasChildren) {
+              const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+              const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
+              const marginLeft = parseFloat(computedStyle.marginLeft) || 0;
+              const marginRight = parseFloat(computedStyle.marginRight) || 0;
+              
+              // Calculate total width including padding and margins
+              const totalWidth = rect.width + marginLeft + marginRight;
+              
+              // Only consider reasonable widths (not tiny elements)
+              if (totalWidth > 300 && totalWidth > maxContentWidth) {
+                maxContentWidth = totalWidth;
+                contentElement = element;
+                hasValidContent = true;
+              }
+            }
           }
         }
       }
       
-      // If no content container found, check body
-      if (!contentElement) {
+      // If no valid content container found, use body width
+      if (!hasValidContent) {
         const bodyRect = document.body.getBoundingClientRect();
-        maxWidth = bodyRect.width;
+        maxContentWidth = Math.max(bodyRect.width, 768);
       }
       
-      // Also check for any overflowing elements
-      const allElements = document.querySelectorAll('*');
-      let documentWidth = maxWidth;
+      // Check for any overflowing elements (images, tables, etc.)
+      let documentWidth = maxContentWidth;
+      const importantElements = document.querySelectorAll('img, table, pre, .code-block, figure, iframe, video');
       
-      allElements.forEach(el => {
+      importantElements.forEach(el => {
         const rect = el.getBoundingClientRect();
-        if (rect.right > documentWidth) {
-          documentWidth = rect.right;
+        const computedStyle = window.getComputedStyle(el);
+        
+        // Skip hidden elements
+        if (computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden' && rect.width > 0) {
+          const rightEdge = rect.right + (parseFloat(computedStyle.marginRight) || 0);
+          if (rightEdge > documentWidth) {
+            documentWidth = rightEdge;
+          }
         }
       });
       
-      // Get the scroll width as well
+      // Also check overall scroll width
       const scrollWidth = Math.max(
         document.body.scrollWidth,
-        document.documentElement.scrollWidth
+        document.documentElement.scrollWidth,
+        document.body.offsetWidth,
+        document.documentElement.offsetWidth
       );
       
+      // Use the maximum of all measurements
+      const finalWidth = Math.max(maxContentWidth, documentWidth, scrollWidth);
+      
+      // Calculate recommended width with constraints
+      const recommendedWidth = Math.min(1600, Math.max(768, Math.ceil(finalWidth * 1.1))); // 10% padding, min 768, max 1600
+      
       return {
-        contentWidth: Math.ceil(maxWidth),
+        contentWidth: Math.ceil(maxContentWidth),
         documentWidth: Math.ceil(documentWidth),
         scrollWidth: scrollWidth,
-        recommendedWidth: Math.min(1400, Math.max(768, Math.ceil(documentWidth * 1.05))) // Add 5% padding, min 768, max 1400
+        finalWidth: Math.ceil(finalWidth),
+        recommendedWidth: recommendedWidth
       };
     });
     
     console.log(chalk.gray(`  Content width: ${dimensions.contentWidth}px`));
     console.log(chalk.gray(`  Document width: ${dimensions.documentWidth}px`));
+    console.log(chalk.gray(`  Scroll width: ${dimensions.scrollWidth}px`));
     console.log(chalk.green(`  ✓ Optimal width: ${dimensions.recommendedWidth}px`));
     
     return dimensions.recommendedWidth;
@@ -479,6 +517,7 @@ class BlogArchiver {
         const finalPdf = await this.addTOC(pdfBuffer, headings, pageTitle, url);
         await fs.writeFile(outputPath, finalPdf);
       } else {
+        console.log(chalk.gray('  No headings found, skipping TOC'));
         await fs.writeFile(outputPath, pdfBuffer);
       }
 
