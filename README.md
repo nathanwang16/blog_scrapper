@@ -28,7 +28,7 @@ In an era where content can disappear at any moment, **Blog Archiver** helps you
 
 1. Clone this repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/nathanwang16/blog_scrapper.git
 cd blog_scrapper
 ```
 
