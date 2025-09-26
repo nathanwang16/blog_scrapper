@@ -14,31 +14,25 @@ const __dirname = path.dirname(__filename);
 const DEFAULT_PDF_OPTIONS = {
   format: 'A4',
   margin: { 
-    top: '20mm', 
-    bottom: '20mm', 
-    left: '15mm', 
-    right: '15mm' 
+    top: '15mm', 
+    bottom: '15mm', 
+    left: '10mm', 
+    right: '10mm' 
   },
   printBackground: true,
-  displayHeaderFooter: true,
-  headerTemplate: `
-    <div style="font-size: 10px; text-align: center; width: 100%; color: #666;">
-      <span class="title"></span>
-    </div>
-  `,
-  footerTemplate: `
-    <div style="font-size: 10px; text-align: center; width: 100%; color: #666;">
-      Page <span class="pageNumber"></span> of <span class="totalPages"></span>
-    </div>
-  `,
-  scale: 0.95,
-  preferCSSPageSize: false
+  displayHeaderFooter: false, // Disable headers/footers to preserve layout
+  scale: 1, // Keep original scale
+  preferCSSPageSize: true, // Respect page CSS if defined
+  width: '210mm', // A4 width
+  height: '297mm' // A4 height
 };
 
 class BlogArchiver {
-  constructor() {
+  constructor(options = {}) {
     this.browser = null;
     this.page = null;
+    this.viewportWidth = parseInt(options.width) || 1280;
+    this.fullPage = options.fullPage || false;
   }
 
   async init() {
@@ -54,12 +48,15 @@ class BlogArchiver {
     });
     this.page = await this.browser.newPage();
     
-    // Set viewport for consistent rendering
+    // Set viewport to match content width for better layout preservation
     await this.page.setViewport({
-      width: 1920,
-      height: 1080,
-      deviceScaleFactor: 2
+      width: this.viewportWidth,
+      height: 720,
+      deviceScaleFactor: 1
     });
+    
+    // Emulate print media type for better CSS handling
+    await this.page.emulateMediaType('print');
 
     // Set user agent to avoid bot detection
     await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -134,10 +131,13 @@ class BlogArchiver {
       const headings = await this.extractHeadings(url);
       const pageTitle = await this.page.title();
 
+      // Wait for fonts to load
+      await this.page.evaluateHandle('document.fonts.ready');
+      
       // Inject custom styles for better PDF rendering and offline reading
       await this.page.addStyleTag({
         content: `
-          @media print {
+          @media print, screen {
             * {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
@@ -153,13 +153,19 @@ class BlogArchiver {
             pre, code {
               white-space: pre-wrap !important;
               word-wrap: break-word !important;
-              background-color: #f5f5f5 !important;
-              border: 1px solid #ddd !important;
-              padding: 2px 4px !important;
+              overflow-x: auto !important;
             }
             
             pre {
-              padding: 10px !important;
+              max-width: 100% !important;
+              overflow-x: auto !important;
+            }
+            
+            /* Preserve original code styling */
+            pre code {
+              background: inherit !important;
+              border: inherit !important;
+              padding: inherit !important;
             }
             
             /* Prevent page breaks in important elements */
@@ -205,23 +211,69 @@ class BlogArchiver {
               display: none !important;
             }
             
-            /* Better typography for reading */
-            body {
-              font-size: 11pt !important;
-              line-height: 1.6 !important;
+            /* Preserve original layout */
+            * {
+              max-width: 100% !important;
+              box-sizing: border-box !important;
             }
             
+            /* Ensure content fits */
+            body {
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            
+            /* Keep original article width but ensure it fits */
             article, .post-content, .entry-content, main {
+              width: auto !important;
               max-width: 100% !important;
+              margin: 0 auto !important;
+            }
+            
+            /* Fix table overflow */
+            table {
+              max-width: 100% !important;
+              width: auto !important;
+            }
+            
+            /* Fix image sizing */
+            img, figure, picture {
+              max-width: 100% !important;
+              height: auto !important;
             }
           }
         `
       });
 
+      // Scroll page to actual content height to ensure proper rendering
+      await this.page.evaluate(() => {
+        const body = document.body;
+        const html = document.documentElement;
+        const height = Math.max(
+          body.scrollHeight, body.offsetHeight,
+          html.clientHeight, html.scrollHeight, html.offsetHeight
+        );
+        window.scrollTo(0, height);
+        window.scrollTo(0, 0);
+      });
+      
+      // Wait a bit for layout to settle
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       console.log(chalk.blue('📄 Generating PDF for offline reading...'));
       
+      // Adjust PDF options based on settings
+      const pdfOptions = { ...DEFAULT_PDF_OPTIONS };
+      if (this.fullPage) {
+        // For full page capture, remove fixed height
+        delete pdfOptions.height;
+        pdfOptions.format = undefined;
+        pdfOptions.width = '210mm';
+      }
+      
       // Generate the main content PDF
-      const pdfBuffer = await this.page.pdf(DEFAULT_PDF_OPTIONS);
+      const pdfBuffer = await this.page.pdf(pdfOptions);
 
       // Create TOC if headings exist
       if (headings.length > 0) {
@@ -376,8 +428,13 @@ program
   .option('-f, --file <path>', 'Read URLs from a text file (one per line)')
   .option('--batch', 'Enable batch mode for processing multiple URLs')
   .option('--delay <ms>', 'Delay between processing URLs in batch mode', '2000')
+  .option('--width <pixels>', 'Viewport width for rendering (default: 1280)', '1280')
+  .option('--full-page', 'Capture full page height without pagination')
   .action(async (urls, options) => {
-    const archiver = new BlogArchiver();
+    const archiver = new BlogArchiver({
+      width: options.width,
+      fullPage: options.fullPage
+    });
     
     try {
       // Collect URLs from various sources

@@ -3,7 +3,14 @@
     "allow": [
       "Bash(npm install)",
       "Bash(node:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(git commit:*)",
+      "Bash(echo \"To push to GitHub, you''ll need to:\n1. Create a new repository on GitHub (https://github.com/new)\n2. Name it ''blog-archiver'' or similar\n3. Run these commands:\n\ngit branch -M main\ngit remote add origin https://github.com/YOUR-USERNAME/blog-archiver.git\ngit push -u origin main\n\nThe repository is ready to be pushed!\")",
+      "Bash(git branch:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
