@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 320px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      margin: 0;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 20px;
+      color: #2d3748;
+      font-weight: 600;
+    }
+    
+    .subtitle {
+      color: #718096;
+      font-size: 13px;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+    
+    .url-display {
+      background: #f7fafc;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .url-label {
+      font-size: 11px;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    
+    .url-text {
+      font-size: 13px;
+      color: #2d3748;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+    
+    .generate-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .generate-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    }
+    
+    .generate-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    
+    .generate-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    
+    .status.success {
+      background: #c6f6d5;
+      color: #22543d;
+      border: 1px solid #9ae6b4;
+    }
+    
+    .status.error {
+      background: #fed7d7;
+      color: #742a2a;
+      border: 1px solid #fc8181;
+    }
+    
+    .status.info {
+      background: #e6fffa;
+      color: #234e52;
+      border: 1px solid #81e6d9;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    .generating .spinner {
+      display: inline-block;
+    }
+    
+    .generating .btn-text {
+      display: none;
+    }
+    
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    
+    .features {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e8f0;
+    }
+    
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #4a5568;
+      margin-bottom: 8px;
+    }
+    
+    .feature-icon {
+      color: #667eea;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📄 PDF Generator</h1>
+    <p class="subtitle">Generate beautiful PDFs with interactive table of contents</p>
+    
+    <div class="url-display">
+      <div class="url-label">Current Page</div>
+      <div class="url-text" id="current-url">Loading...</div>
+    </div>
+    
+    <button id="generate-btn" class="generate-btn">
+      <span class="btn-text">Generate PDF</span>
+      <div class="spinner"></div>
+    </button>
+    
+    <div id="status" class="status"></div>
+    
+    <div class="features">
+      <div class="feature">
+        <span class="feature-icon">✓</span>
+        <span>Interactive table of contents</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">✓</span>
+        <span>Beautiful A4 formatting</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">✓</span>
+        <span>Preserves all styling & images</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">✓</span>
+        <span>Page numbers & headers</span>
+      </div>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
